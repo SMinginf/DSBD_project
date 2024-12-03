@@ -1,0 +1,6 @@
+Per avviare l'applicazione effettuare semplicemente il "docker compose up"
+dalla directory "docker" contenente il file docker-compose.yml, dopodichè
+avviare il client eseguendo il file client.py nella directory grpc_client.
+
+Sia il data_collector che il server sono stati dotati dello script "wait-for-it.sh"
+in modo da aspettare che il db mysql sia effettivamente pronto prima di tentare di connettervi.
