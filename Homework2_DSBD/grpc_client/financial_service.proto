@@ -1,0 +1,49 @@
+syntax = "proto3"; // Specifica la versione del protocol buffer.
+
+package financialservice; // Nome del package
+
+service FinancialService {
+    // Gestione degli utenti
+    rpc RegisterUser(UserRequest) returns (UserResponse); // Registrazione di un utente
+    rpc UpdateUser(UserRequest) returns (UserResponse);   // Update delle informazioni di un utente
+    rpc DeleteUser(UserRequest) returns (UserResponse);   // Eliminazione di un utente
+
+    // Operazioni finanziarie
+    rpc GetLatestValue(UserRequest) returns (StockValueResponse); // Ultimo valore disponibile
+    rpc GetAverageValue(StockHistoryRequest) returns (StockValueResponse); // Media degli ultimi X valori
+}
+
+// Messaggi per la gestione degli utenti
+message UserRequest {
+    string email = 1;  // Email dell'utente
+    string ticker = 2; // Ticker del titolo azionario di interesse (opzionale per alcune operazioni)
+}
+
+message UserResponse {
+    bool success = 1;     // Indica se l'operazione è andata a buon fine
+    string message = 2;   // Messaggio di feedback
+}
+
+message FinancialData {
+    string ticker = 1;
+    string date = 2;
+    double open = 3;
+    double high = 4;
+    double low = 5;
+    double close = 6;
+    uint32 volume = 7;
+    float dividends = 8;
+    float splits = 9;
+}
+
+// Messaggi per il recupero dati finanziari
+message StockValueResponse {
+    bool success = 1;     // Esito dell'operazione
+    FinancialData data = 2;
+    string message = 3;
+}
+
+message StockHistoryRequest {
+    string email = 1;     // Email dell'utente
+    int32 count = 2;      // Numero di valori storici da considerare
+}
