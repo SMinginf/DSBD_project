@@ -2,7 +2,7 @@ import grpc
 import financial_service_pb2 as pb2
 import financial_service_pb2_grpc as pb2_grpc
 import uuid
-
+from google.protobuf.wrappers_pb2 import FloatValue
 
 def mostra_menu(client_id):
     menu = [
@@ -38,12 +38,35 @@ def run():
         
         # Definisco il dizionario di azioni
         azioni = {
-            1: ("Registra Utente", lambda: pb2.UserRequest(email=input("\nInserisci email: "), ticker=input("\nInserisci ticker: ")), stub.RegisterUser),
-            2: ("Aggiorna Utente", lambda: pb2.UserRequest(email=input("\nInserisci email: "), ticker=input("\nInserisci ticker: ")), stub.UpdateUser),
-            3: ("Cancella Utente", lambda: pb2.UserRequest(email=input("\nInserisci email: ")), stub.DeleteUser),
-            4: ("Leggi ultimo valore", lambda: pb2.UserRequest(email=input("\nInserisci email: ")), stub.GetLatestValue),
-            5: ("Calcola valore medio", lambda: pb2.StockHistoryRequest(email=input("\nInserisci email: "), count=int(input("\nInserisci il numero di valori: "))), stub.GetAverageValue)
+            1: ("Registra Utente", lambda: pb2.UserRequest(
+                email=input("\nInserisci email: "),
+                ticker=input("\nInserisci ticker: "),
+                low_value = FloatValue(value = float(lv)) if (lv := input("\nInserisci low value (opzionale): ")) else None,
+                high_value = FloatValue(value = float(hv)) if (hv := input("\nInserisci high value (opzionale): ")) else None
+            ), stub.RegisterUser),
+
+            
+            2: ("Aggiorna Utente", lambda: pb2.UserRequest(
+                email=input("\nInserisci email: "),
+                ticker=input("\nInserisci nuovo ticker: "),
+                low_value = FloatValue(value = float(lv)) if (lv := input("\nInserisci nuovo low value (lascia vuoto per toglierlo): ")) else None,
+                high_value = FloatValue(value = float(hv)) if (hv := input("\nInserisci nuovo high value (lascia vuoto per toglierlo): ")) else None,
+            ), stub.UpdateUser),
+            
+            3: ("Cancella Utente", lambda: pb2.UserRequest(
+                email=input("\nInserisci email: ")
+            ), stub.DeleteUser),
+            
+            4: ("Leggi ultimo valore", lambda: pb2.UserRequest(
+                email=input("\nInserisci email: ")
+            ), stub.GetLatestValue),
+            
+            5: ("Calcola valore medio", lambda: pb2.StockHistoryRequest(
+                email=input("\nInserisci email: "),
+                count=int(input("\nInserisci il numero di valori: "))
+            ), stub.GetAverageValue)
         }
+
 
         
         while True:
@@ -99,8 +122,8 @@ def run():
                             
                     else:
                         print(f"Messaggio di risposta: {risposta.message} (Esito: {risposta.success})")
-                except ValueError:
-                    print("Errore: dati inseriti non validi.")
+                except (ValueError, TypeError) as e:
+                    print(f"Errore:", str(e))
                 request_id += 1
             else:
                 print("\nOpzione non valida! Inserisci un numero tra 0 e 5.")
