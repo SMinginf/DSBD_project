@@ -6,7 +6,7 @@ import financial_service_pb2_grpc as pb2_grpc
 import mysql.connector
 from threading import Lock
 import yfinance as yf
-
+from google.protobuf.wrappers_pb2 import FloatValue
 
 # A dictionary to store processed request IDs and their responses
 ''' 
@@ -25,11 +25,12 @@ cache_lock = Lock()
 # Settaggio connessione al database MySQL. os.getenv() mi permette di ottenere 
 # il valore di quelle variabili d'ambiente definite nel docker-compose.yml
 def connect_db():
+    # Metto i valori di default per connettersi al container col db quando eseguo il server direttamente da visual studio
     return mysql.connector.connect(
-        host=os.getenv("DB_HOST"), 
-        user=os.getenv("DB_USER"),
-        password=os.getenv("DB_PASSWORD"),
-        database=os.getenv("DB_NAME")
+        host=os.getenv("DB_HOST", "localhost"), 
+        user= os.getenv("DB_USER", "my_user"),
+        password= os.getenv("DB_PASSWORD", "my_pass"),
+        database=os.getenv("DB_NAME", "my_db")
     )
 
 def process_with_cache(context, cache_lock, cache, process_function):
@@ -106,6 +107,10 @@ class NotEnoughDataException(Exception):
 class InvalidInputTypeException(Exception):
     def __init__(self, message="Il valore inserito non è un numero valido."):
         super().__init__(message)
+
+class ThresholdsViolatedException(Exception):
+    def __init__(self, message="'High value' deve avere un valore maggiore di 'low value'."):
+        super().__init__(message)
 #------------------------------------------------------------------------------------------------------------
 
 
@@ -134,9 +139,15 @@ class FinancialService(pb2_grpc.FinancialServiceServicer):
                 if not is_valid_ticker(request.ticker):
                     raise TickerNotValidException(request.ticker)
                 
+                # Verifica che valga la condizione "high_value is NULL or high_value > low_value"
+                low_value = request.low_value.value if request.HasField("low_value") else None
+                high_value = request.high_value.value if request.HasField("high_value")  else None
+                if not (high_value is None or high_value > low_value):
+                    raise ThresholdsViolatedException
+                
                 # Query
                 self.cur.execute(
-                    "INSERT INTO utenti (email, ticker) VALUES (%s, %s)", (request.email, request.ticker)
+                    "INSERT INTO utenti (email, ticker, low_value, high_value) VALUES (%s, %s, %s, %s)", (request.email, request.ticker, low_value, high_value)
                 )
                 self.conn.commit()
                 return pb2.UserResponse(success=True, message="Utente registrato con successo.")
@@ -149,7 +160,7 @@ class FinancialService(pb2_grpc.FinancialServiceServicer):
             # Utilizza la funzione delegata per gestire la cache e l'elaborazione
             response = process_with_cache(context, cache_lock, cache, process_register)
             return response
-        except (EmailAlreadyExistsException, TickerNotValidException, mysql.connector.Error) as e:
+        except (EmailAlreadyExistsException, TickerNotValidException, mysql.connector.Error, ThresholdsViolatedException) as e:
             if isinstance(e, mysql.connector.Error):
                 self.conn.rollback()
             return pb2.UserResponse(success=False, message=str(e))
@@ -169,13 +180,21 @@ class FinancialService(pb2_grpc.FinancialServiceServicer):
                 # Controlla se il ticker è valido
                 if not is_valid_ticker(request.ticker):
                     raise TickerNotValidException(request.ticker)
+                
+                # Verifica che valga la condizione "high_value is NULL or high_value > low_value"
+                low_value = request.low_value.value if request.HasField("low_value") else None
+                high_value = request.high_value.value if request.HasField("high_value")  else None
+                if not (high_value is None or high_value > low_value):
+                    raise ThresholdsViolatedException
+                
 
-                # Cancella la vecchia sessione (id_utente, OLD ticker)
-                self.cur.execute("DELETE from sessioni_utenti WHERE id_utente = (SELECT id FROM utenti WHERE email = %s LIMIT 1);", (request.email,))
+                # La cancellazione della vecchia sessione, se il ticker viene aggiornato, è stata implementata tramite un trigger
+                # scritto nel file db_init_script.sql
+                #self.cur.execute("DELETE from sessioni_utenti WHERE id_utente = (SELECT id FROM utenti WHERE email = %s LIMIT 1);", (request.email,))
 
                 # Aggiorna il ticker
                 self.cur.execute(
-                    "UPDATE utenti SET ticker = %s WHERE email = %s;", (request.ticker, request.email)
+                    "UPDATE utenti SET ticker = %s, low_value = %s, high_value = %s WHERE email = %s;", (request.ticker, low_value, high_value, request.email)
                 )
                 self.conn.commit()
                 return pb2.UserResponse(success=True, message="Utente aggiornato con successo.")
@@ -187,8 +206,8 @@ class FinancialService(pb2_grpc.FinancialServiceServicer):
             response = process_with_cache(context, cache_lock, cache, process_update)
             return response
         
-        except (UserDoesNotExistsException, TickerNotValidException, mysql.connector.Error) as e:
-            if isinstance(e, mysql.connector.Error):  # Assicurati che il `if` e il `return` siano allineati
+        except (UserDoesNotExistsException, TickerNotValidException, mysql.connector.Error, ThresholdsViolatedException) as e:
+            if isinstance(e, mysql.connector.Error): 
                 self.conn.rollback()
             return pb2.UserResponse(success=False, message=str(e))
 

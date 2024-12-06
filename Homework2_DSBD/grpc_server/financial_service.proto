@@ -1,5 +1,7 @@
 syntax = "proto3"; // Specifica la versione del protocol buffer.
 
+import "google/protobuf/wrappers.proto";
+
 package financialservice; // Nome del package
 
 service FinancialService {
@@ -16,7 +18,9 @@ service FinancialService {
 // Messaggi per la gestione degli utenti
 message UserRequest {
     string email = 1;  // Email dell'utente
-    string ticker = 2; // Ticker del titolo azionario di interesse (opzionale per alcune operazioni)
+    string ticker = 2; 
+    google.protobuf.FloatValue low_value = 3;
+    google.protobuf.FloatValue high_value = 4;
 }
 
 message UserResponse {
@@ -40,8 +44,6 @@ message FinancialData {
 // Messaggi per il recupero dati finanziari
 message StockValueResponse {
     bool success = 1;     // Esito dell'operazione
-    //double value = 2;     // Valore del titolo azionario - o tupla? -
-    //string date = 3; // Data associata al valore - nel caso della tupla non esiste più questo valore -
     FinancialData data = 2;
     string message = 3;
 }
