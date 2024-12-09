@@ -74,6 +74,57 @@ def is_valid_ticker(ticker):
     history = stock.history(period="1d")
     return not history.empty 
 
+#---------------------------------- CQRS ----------------------------------------------------------------
+class CommandHandler:
+    def __init__(self, conn):
+        self.conn = conn
+        self.cur = self.conn.cursor()
+
+    
+    def register_user(self, email, ticker, low_value, high_value):
+        self.cur.execute("INSERT INTO utenti (email, ticker) VALUES (%s, %s)", (email, ticker))
+        self.conn.commit()
+
+    def update_user(self, email, ticker, low_value, high_value):
+        self.cur.execute("UPDATE utenti SET ticker = %s, low_value = %s, high_value = %s WHERE email = %s;", (ticker, low_value, high_value, email))
+        self.conn.commit()
+
+    def delete_user(self, email):
+        self.cur.execute("DELETE FROM utenti WHERE email = %s;", (email,))
+        self.conn.commit()
+        
+
+
+class QueryHandler:
+    def __init__(self, cur):
+        self.cur = cur
+        
+
+    def n_users(self, email):
+        self.cur.execute("SELECT COUNT(*) FROM utenti WHERE email = %s", (email,))
+        return self.cur.fetchone()[0] 
+
+    def get_latest_value(self, email):
+
+        self.cur.execute("SELECT dati.ticker, date, open, high, low, close, volume, dividends, splits "
+                             "FROM utenti JOIN sessioni_utenti ON utenti.id = sessioni_utenti.id_utente "
+                             "JOIN dati ON sessioni_utenti.id_dato = dati.id "
+                             "WHERE utenti.email = %s ORDER BY date DESC LIMIT 1;", (email,))
+        return self.cur.fetchone()
+    
+    def n_user_data(self, email):
+        self.cur.execute("SELECT COUNT(*) FROM utenti JOIN sessioni_utenti ON utenti.id = sessioni_utenti.id_utente WHERE utenti.email = %s", (email,))
+        return self.cur.fetchone()[0]  
+
+    def get_average_value(self, email, count):
+        self.cur.execute( "SELECT AVG(open), AVG(high), AVG(low), AVG(close), AVG(volume), AVG(dividends), AVG(splits) "
+                         "FROM (SELECT open, high, low, close, volume, dividends, splits "
+                                "FROM utenti JOIN sessioni_utenti ON utenti.id = sessioni_utenti.id_utente JOIN dati ON sessioni_utenti.id_dato = dati.id "
+                                "WHERE utenti.email = %s "
+                                "ORDER BY dati.date DESC LIMIT %s) AS subquery", (email, count))
+        return self.cur.fetchone()
+        
+
 
 
 #  ------------------------   USER DEFINED EXCEPTIONS   -------------------------------------------------
@@ -119,20 +170,17 @@ class FinancialService(pb2_grpc.FinancialServiceServicer):
     def __init__(self):
         self.conn = connect_db()
         self.cur = self.conn.cursor()
-
+        self.read_service = QueryHandler(self.cur)
+        self.write_service = CommandHandler(self.conn)
     
     def RegisterUser(self, request, context):            
         def process_register():
             try:
-                  	
                 # Lock della tabella utenti
                 self.cur.execute("LOCK TABLES utenti WRITE;")
                 
-                # Controlla se l'email esiste già
-                self.cur.execute("SELECT COUNT(*) FROM utenti WHERE email = %s", (request.email,))
-                count = self.cur.fetchone()[0]
-            
-                if count > 0:
+                # Controlla se l'email esiste già   
+                if self.read_service.n_users(request.email) > 0:
                     raise EmailAlreadyExistsException(request.email)
 
                 # Controlla se il ticker è valido
@@ -146,10 +194,8 @@ class FinancialService(pb2_grpc.FinancialServiceServicer):
                     raise ThresholdsViolatedException
                 
                 # Query
-                self.cur.execute(
-                    "INSERT INTO utenti (email, ticker, low_value, high_value) VALUES (%s, %s, %s, %s)", (request.email, request.ticker, low_value, high_value)
-                )
-                self.conn.commit()
+                self.write_service.register_user(request.email, request.ticker, low_value, high_value )
+
                 return pb2.UserResponse(success=True, message="Utente registrato con successo.")
             
             finally:
@@ -171,10 +217,8 @@ class FinancialService(pb2_grpc.FinancialServiceServicer):
             try:
                 self.cur.execute("LOCK TABLES utenti WRITE, sessioni_utenti WRITE;")
                 
-                # Controlla se l'utente inserito esiste
-                self.cur.execute("SELECT COUNT(*) FROM utenti WHERE email = %s", (request.email,))
-                count = self.cur.fetchone()[0]    
-                if count == 0:
+                # Controlla se l'utente inserito esiste  
+                if self.read_service.n_users(request.email) == 0:
                     raise UserDoesNotExistsException
 
                 # Controlla se il ticker è valido
@@ -187,16 +231,9 @@ class FinancialService(pb2_grpc.FinancialServiceServicer):
                 if not (high_value is None or high_value > low_value):
                     raise ThresholdsViolatedException
                 
-
-                # La cancellazione della vecchia sessione, se il ticker viene aggiornato, è stata implementata tramite un trigger
-                # scritto nel file db_init_script.sql
-                #self.cur.execute("DELETE from sessioni_utenti WHERE id_utente = (SELECT id FROM utenti WHERE email = %s LIMIT 1);", (request.email,))
-
                 # Aggiorna il ticker
-                self.cur.execute(
-                    "UPDATE utenti SET ticker = %s, low_value = %s, high_value = %s WHERE email = %s;", (request.ticker, low_value, high_value, request.email)
-                )
-                self.conn.commit()
+                self.write_service.update_user(request.ticker, low_value, high_value, request.email)                
+                
                 return pb2.UserResponse(success=True, message="Utente aggiornato con successo.")
             
             finally:
@@ -221,17 +258,12 @@ class FinancialService(pb2_grpc.FinancialServiceServicer):
                 # Lock della tabella 
                 self.cur.execute("LOCK TABLES utenti WRITE;")
             
-                # Controlla se l'utente inserito esiste
-                self.cur.execute("SELECT COUNT(*) FROM utenti WHERE email = %s", (request.email,))
-                count = self.cur.fetchone()[0]    
-                if count == 0:
+                # Controlla se l'utente inserito esiste  
+                if self.read_service.n_users(request.email) == 0:
                     raise UserDoesNotExistsException
 
-                self.cur.execute(
-                    "DELETE FROM utenti WHERE email = %s;",
-                    (request.email,)                                
-                )
-                self.conn.commit()
+                self.write_service.delete_user(request.email)
+
                 return pb2.UserResponse(success=True, message="Utente cancellato con successo.")
             
             finally:
@@ -254,18 +286,15 @@ class FinancialService(pb2_grpc.FinancialServiceServicer):
             try:
                 self.cur.execute("LOCK TABLES utenti READ, sessioni_utenti READ, dati READ;")
             
-                # Controlla se l'utente inserito esiste
-                self.cur.execute("SELECT COUNT(*) FROM utenti WHERE email = %s", (request.email,))
-                count = self.cur.fetchone()[0]    
-                if count == 0:
+                # Controlla se l'utente inserito esiste  
+                if self.read_service.n_users(request.email) == 0:
                     raise UserDoesNotExistsException
 
-                self.cur.execute("SELECT dati.ticker, date, open, high, low, close, volume, dividends, splits FROM utenti JOIN sessioni_utenti ON utenti.id = sessioni_utenti.id_utente JOIN dati ON sessioni_utenti.id_dato = dati.id WHERE utenti.email = %s ORDER BY date DESC LIMIT 1;", (request.email,))
-                result = self.cur.fetchone()
+                result = self.read_service.get_latest_value(request.email)
+                
                 if result:
-                    print()
                     data = pb2.FinancialData(
-                    ticker = str(result[0]),  # Assicurati che sia una stringa
+                    ticker = str(result[0]),  
                     date = str(result[1]),  
                     open = float(result[2]),  
                     high = float(result[3]),
@@ -304,21 +333,17 @@ class FinancialService(pb2_grpc.FinancialServiceServicer):
                 if not isinstance(request.count, int) or request.count <= 0 :
                     raise InvalidInputTypeException
         
-                # Controlla se l'utente inserito esiste
-                self.cur.execute("SELECT COUNT(*) FROM utenti WHERE email = %s", (request.email,))
-                count = self.cur.fetchone()[0]    
-                if count == 0:
+                # Controlla se l'utente inserito esiste  
+                if self.read_service.n_users(request.email) == 0:
                     raise UserDoesNotExistsException
 
         
                 # Controlla se esistono n=count dati
-                self.cur.execute("SELECT COUNT(*) FROM utenti JOIN sessioni_utenti ON utenti.id = sessioni_utenti.id_utente WHERE utenti.email = %s", (request.email,))
-                count = self.cur.fetchone()[0]    
-                if count < request.count:
+                if self.read_service.n_user_data(request.email) < request.count:
                     raise NotEnoughDataException
 
-                self.cur.execute( "SELECT AVG(open), AVG(high), AVG(low), AVG(close), AVG(volume), AVG(dividends), AVG(splits) FROM (SELECT open, high, low, close, volume, dividends, splits FROM utenti JOIN sessioni_utenti ON utenti.id = sessioni_utenti.id_utente JOIN dati ON sessioni_utenti.id_dato = dati.id WHERE utenti.email = %s ORDER BY dati.date DESC LIMIT %s) AS subquery", (request.email, request.count))
-                result = self.cur.fetchone()
+                result = self.read_service.get_average_value(request.email, request.count)
+                
                 data = pb2.FinancialData(
                                          open = float(result[0]), 
                                          high = float(result[1]), 
