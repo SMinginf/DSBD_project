@@ -1,0 +1,50 @@
+
+services:  
+  mysql:
+    image: mysql:latest
+    container_name: mysql_db_cntr
+    restart: always
+    environment:
+      MYSQL_ROOT_PASSWORD: rootpass # password per l'utente root
+      MYSQL_DATABASE: my_db # nome del db che verrà creato
+      MYSQL_USER: my_user # credenziali per utente non root
+      MYSQL_PASSWORD: my_pass
+    volumes:
+    - mysql_data:/var/lib/mysql # bind mount da sostituire alla fine con un volume 
+    - ../mysql/db_init_script.sql:/docker-entrypoint-initdb.d/db_init_script.sql:ro # monta il file .sql nella directory di inizializzazione di MySQL specificando l'accesso al file montato in sola lettura (:ro) -giusto per sicurezza-
+  
+  grpc_server:
+    build:
+      context: ../grpc_server
+      dockerfile: Dockerfile      
+    image: grpc_server_img #specifica il nome che voglio dare alla mia immagine   
+    ports:
+    - "50051:50051"
+    container_name: grpc_server_cntr
+    environment:
+       DB_HOST: mysql # nome del servizio che deve essere usato come host
+       DB_NAME: my_db # nome del db
+       DB_USER: my_user # credenziali
+       DB_PASSWORD: my_pass   
+    depends_on:
+      - mysql
+    
+
+  data_collector:
+   build:
+     context: ../data_collector
+     dockerfile: Dockerfile
+   image: data_collector_img
+   container_name: data_collector_cntr
+   environment:
+     DB_HOST: mysql # nome del servizio che deve essere usato come host
+     DB_NAME: my_db # nome del db
+     DB_USER: my_user # credenziali
+     DB_PASSWORD: my_pass
+   depends_on:
+     - mysql 
+   restart: always  
+   
+volumes:
+   mysql_data:    
+  

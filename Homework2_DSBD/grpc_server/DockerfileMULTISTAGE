@@ -1,0 +1,29 @@
+FROM python:3.10-slim AS build
+
+WORKDIR /app
+
+COPY requirements.txt .
+
+# Crea una directory specifica per salvare e trasferire facilmente le dipendenze
+RUN mkdir /dependencies && pip install --no-cache-dir -r requirements.txt --target /dependencies
+
+# Fase 2: Runtime
+FROM python:3.10-slim AS runtime
+
+WORKDIR /app
+
+# Copia le dipendenze installate dalla fase build alla fase runtime
+COPY --from=build /dependencies /usr/local/lib/python3.10/site-packages
+
+# Copia i file sorgenti necessari per l'applicazione
+COPY server.py .
+COPY CQRS.py .
+COPY financial_service_pb2.py .
+COPY financial_service_pb2_grpc.py .
+COPY wait-for-it.sh /usr/local/bin
+
+# Aggiungi i permessi di esecuzione al file wait-for-it.sh
+RUN chmod +x /usr/local/bin/wait-for-it.sh
+
+CMD ["wait-for-it.sh", "mysql:3306", "--", "python", "server.py"]
+

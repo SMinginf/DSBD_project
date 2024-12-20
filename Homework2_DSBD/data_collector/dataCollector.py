@@ -9,10 +9,10 @@ import schedule
 # Connettersi al database MySQL
 def connect_db():
     return mysql.connector.connect(   
-        host=os.getenv("DB_HOST"),  
-        user=os.getenv("DB_USER"),
-        password=os.getenv("DB_PASSWORD"),
-        database=os.getenv("DB_NAME")
+        host=os.getenv("DB_HOST", "localhost"), 
+        user= os.getenv("DB_USER", "my_user"),
+        password= os.getenv("DB_PASSWORD", "my_pass"),
+        database=os.getenv("DB_NAME", "my_db")
     )
 
 # Funzione per ottenere il valore corrente di un ticker da yfinance

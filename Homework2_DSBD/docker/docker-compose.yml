@@ -1,50 +1,113 @@
-
-services:  
+services:
+  # Servizio MySQL
   mysql:
     image: mysql:latest
     container_name: mysql_db_cntr
     restart: always
     environment:
-      MYSQL_ROOT_PASSWORD: rootpass # password per l'utente root
-      MYSQL_DATABASE: my_db # nome del db che verrà creato
-      MYSQL_USER: my_user # credenziali per utente non root
+      MYSQL_ROOT_PASSWORD: rootpass
+      MYSQL_DATABASE: my_db
+      MYSQL_USER: my_user
       MYSQL_PASSWORD: my_pass
     volumes:
-    - mysql_data:/var/lib/mysql # bind mount da sostituire alla fine con un volume 
-    - ../mysql/db_init_script.sql:/docker-entrypoint-initdb.d/db_init_script.sql:ro # monta il file .sql nella directory di inizializzazione di MySQL specificando l'accesso al file montato in sola lettura (:ro) -giusto per sicurezza-
-  
+      - mysql_data:/var/lib/mysql
+      - ../mysql/db_init_script.sql:/docker-entrypoint-initdb.d/db_init_script.sql:ro
+
+  # Servizio gRPC Server
   grpc_server:
     build:
       context: ../grpc_server
-      dockerfile: Dockerfile      
-    image: grpc_server_img #specifica il nome che voglio dare alla mia immagine   
+      dockerfile: Dockerfile
+    image: grpc_server_img
     ports:
-    - "50051:50051"
+      - "50051:50051"
     container_name: grpc_server_cntr
     environment:
-       DB_HOST: mysql # nome del servizio che deve essere usato come host
-       DB_NAME: my_db # nome del db
-       DB_USER: my_user # credenziali
-       DB_PASSWORD: my_pass   
+      DB_HOST: mysql
+      DB_NAME: my_db
+      DB_USER: my_user
+      DB_PASSWORD: my_pass
     depends_on:
       - mysql
-    
 
+  # Servizio DataCollector
   data_collector:
-   build:
-     context: ../data_collector
-     dockerfile: Dockerfile
-   image: data_collector_img
-   container_name: data_collector_cntr
-   environment:
-     DB_HOST: mysql # nome del servizio che deve essere usato come host
-     DB_NAME: my_db # nome del db
-     DB_USER: my_user # credenziali
-     DB_PASSWORD: my_pass
-   depends_on:
-     - mysql 
-   restart: always  
-   
+    build:
+      context: ../data_collector
+      dockerfile: Dockerfile
+    image: data_collector_img
+    container_name: data_collector_cntr
+    environment:
+      DB_HOST: mysql
+      DB_NAME: my_db
+      DB_USER: my_user
+      DB_PASSWORD: my_pass
+    depends_on:
+      - mysql
+    restart: always
+
+  # Servizio Zookeeper (necessario per Kafka)
+  zookeeper:
+    image: confluentinc/cp-zookeeper:latest
+    container_name: zookeeper_cntr
+    restart: always
+    environment:
+      ZOOKEEPER_CLIENT_PORT: 2181
+      ZOOKEEPER_TICK_TIME: 2000
+
+  # Servizio Kafka
+  kafka:
+    image: confluentinc/cp-kafka:latest
+    container_name: kafka_cntr
+    restart: always
+    depends_on:
+      - zookeeper
+    environment:
+      KAFKA_BROKER_ID: 1
+      KAFKA_ZOOKEEPER_CONNECT: zookeeper:2181
+      KAFKA_ADVERTISED_LISTENERS: PLAINTEXT://kafka:9092, PLAINTEXT_HOST://localhost:19092
+      KAFKA_LISTENER_SECURITY_PROTOCOL_MAP: PLAINTEXT:PLAINTEXT,PLAINTEXT_HOST:PLAINTEXT
+      KAFKA_INTER_BROKER_LISTENER_NAME: PLAINTEXT
+      KAFKA_OFFSETS_TOPIC_REPLICATION_FACTOR: 1
+    ports:
+      - "9092:9092"
+
+
+  # Servizio AlertSystem
+  alert_system:
+    build:
+      context: ../alert_system
+      dockerfile: Dockerfile
+    image: alert_system_img
+    container_name: alert_system_cntr
+    environment:
+      DB_HOST: mysql
+      DB_NAME: my_db
+      DB_USER: my_user
+      DB_PASSWORD: my_pass
+      KAFKA_BOOTSTRAP_SERVERS: kafka:9092
+      INPUT_TOPIC: to-alert-system
+      OUTPUT_TOPIC: to-notifier
+    depends_on:
+      - kafka
+      - mysql
+    restart: always
+
+  # Servizio AlertNotifierSystem
+  alert_notifier_system:
+    build:
+      context: ../alert_notifier_system
+      dockerfile: Dockerfile
+    image: alert_notifier_system_img
+    container_name: alert_notifier_system_cntr
+    environment:
+      KAFKA_BOOTSTRAP_SERVERS: kafka:9092
+      INPUT_TOPIC: to-notifier
+      SMTP_USER: signore.marco26@gmail.com
+      SMTP_PASSWORD: kcqw thxc hqio jdpt
+    depends_on:
+      - kafka
+    restart: always
+
 volumes:
-   mysql_data:    
-  
+  mysql_data:

@@ -1,0 +1,2 @@
+confluent_kafka
+mysql-connector-python

@@ -1,12 +1,14 @@
-import os
 import grpc
 from concurrent import futures
+import CQRS
 import financial_service_pb2 as pb2
 import financial_service_pb2_grpc as pb2_grpc
 import mysql.connector
 from threading import Lock
 import yfinance as yf
-from google.protobuf.wrappers_pb2 import FloatValue
+#from google.protobuf.wrappers_pb2 import FloatValue
+
+
 
 # A dictionary to store processed request IDs and their responses
 ''' 
@@ -22,18 +24,9 @@ cache = {}
 cache_lock = Lock()
 
 
-# Settaggio connessione al database MySQL. os.getenv() mi permette di ottenere 
-# il valore di quelle variabili d'ambiente definite nel docker-compose.yml
-def connect_db():
-    # Metto i valori di default per connettersi al container col db quando eseguo il server direttamente da visual studio
-    return mysql.connector.connect(
-        host=os.getenv("DB_HOST", "localhost"), 
-        user= os.getenv("DB_USER", "my_user"),
-        password= os.getenv("DB_PASSWORD", "my_pass"),
-        database=os.getenv("DB_NAME", "my_db")
-    )
 
-def process_with_cache(context, cache_lock, cache, process_function):
+
+def processWithCache(context, cache_lock, cache, process_function):
     """
     Implementa la politica At Most Once.
     Gestisce la logica della cache e delega a una funzione di elaborazione se necessario.
@@ -68,62 +61,12 @@ def process_with_cache(context, cache_lock, cache, process_function):
 
     return response
 
-def is_valid_ticker(ticker):
+def isValidTicker(ticker):
     """Ritorna True se il ticker è valido, False altrimenti."""
     stock = yf.Ticker(ticker)
     history = stock.history(period="1d")
     return not history.empty 
 
-#---------------------------------- CQRS ----------------------------------------------------------------
-class CommandHandler:
-    def __init__(self, conn):
-        self.conn = conn
-        self.cur = self.conn.cursor()
-
-    
-    def register_user(self, email, ticker, low_value, high_value):
-        self.cur.execute("INSERT INTO utenti (email, ticker) VALUES (%s, %s)", (email, ticker))
-        self.conn.commit()
-
-    def update_user(self, email, ticker, low_value, high_value):
-        self.cur.execute("UPDATE utenti SET ticker = %s, low_value = %s, high_value = %s WHERE email = %s;", (ticker, low_value, high_value, email))
-        self.conn.commit()
-
-    def delete_user(self, email):
-        self.cur.execute("DELETE FROM utenti WHERE email = %s;", (email,))
-        self.conn.commit()
-        
-
-
-class QueryHandler:
-    def __init__(self, cur):
-        self.cur = cur
-        
-
-    def n_users(self, email):
-        self.cur.execute("SELECT COUNT(*) FROM utenti WHERE email = %s", (email,))
-        return self.cur.fetchone()[0] 
-
-    def get_latest_value(self, email):
-
-        self.cur.execute("SELECT dati.ticker, date, open, high, low, close, volume, dividends, splits "
-                             "FROM utenti JOIN sessioni_utenti ON utenti.id = sessioni_utenti.id_utente "
-                             "JOIN dati ON sessioni_utenti.id_dato = dati.id "
-                             "WHERE utenti.email = %s ORDER BY date DESC LIMIT 1;", (email,))
-        return self.cur.fetchone()
-    
-    def n_user_data(self, email):
-        self.cur.execute("SELECT COUNT(*) FROM utenti JOIN sessioni_utenti ON utenti.id = sessioni_utenti.id_utente WHERE utenti.email = %s", (email,))
-        return self.cur.fetchone()[0]  
-
-    def get_average_value(self, email, count):
-        self.cur.execute( "SELECT AVG(open), AVG(high), AVG(low), AVG(close), AVG(volume), AVG(dividends), AVG(splits) "
-                         "FROM (SELECT open, high, low, close, volume, dividends, splits "
-                                "FROM utenti JOIN sessioni_utenti ON utenti.id = sessioni_utenti.id_utente JOIN dati ON sessioni_utenti.id_dato = dati.id "
-                                "WHERE utenti.email = %s "
-                                "ORDER BY dati.date DESC LIMIT %s) AS subquery", (email, count))
-        return self.cur.fetchone()
-        
 
 
 
@@ -155,9 +98,11 @@ class NotEnoughDataException(Exception):
     def __init__(self, message="La quantità di dati inserita eccede quella presente." ):     
         super().__init__(message)
 
+
 class InvalidInputTypeException(Exception):
     def __init__(self, message="Il valore inserito non è un numero valido."):
         super().__init__(message)
+
 
 class ThresholdsViolatedException(Exception):
     def __init__(self, message="'High value' deve avere un valore maggiore di 'low value'."):
@@ -165,36 +110,35 @@ class ThresholdsViolatedException(Exception):
 #------------------------------------------------------------------------------------------------------------
 
 
-
 class FinancialService(pb2_grpc.FinancialServiceServicer):
     def __init__(self):
-        self.conn = connect_db()
+        self.conn = CQRS.connect_db()
         self.cur = self.conn.cursor()
-        self.read_service = QueryHandler(self.cur)
-        self.write_service = CommandHandler(self.conn)
+        self.read_service = CQRS.QueryHandler(self.cur)
+        self.write_service = CQRS.CommandHandler(self.conn)
     
     def RegisterUser(self, request, context):            
-        def process_register():
+        def processRegister():
             try:
                 # Lock della tabella utenti
                 self.cur.execute("LOCK TABLES utenti WRITE;")
                 
                 # Controlla se l'email esiste già   
-                if self.read_service.n_users(request.email) > 0:
+                if self.read_service.getNUsers(request.email) > 0:
                     raise EmailAlreadyExistsException(request.email)
 
                 # Controlla se il ticker è valido
-                if not is_valid_ticker(request.ticker):
+                if not isValidTicker(request.ticker):
                     raise TickerNotValidException(request.ticker)
                 
                 # Verifica che valga la condizione "high_value is NULL or high_value > low_value"
                 low_value = request.low_value.value if request.HasField("low_value") else None
                 high_value = request.high_value.value if request.HasField("high_value")  else None
-                if not (high_value is None or high_value > low_value):
+                if high_value is not None and low_value is not None and high_value <= low_value:
                     raise ThresholdsViolatedException
                 
                 # Query
-                self.write_service.register_user(request.email, request.ticker, low_value, high_value )
+                self.write_service.registerUser(request.email, request.ticker, low_value, high_value )
 
                 return pb2.UserResponse(success=True, message="Utente registrato con successo.")
             
@@ -204,7 +148,7 @@ class FinancialService(pb2_grpc.FinancialServiceServicer):
                 
         try:    
             # Utilizza la funzione delegata per gestire la cache e l'elaborazione
-            response = process_with_cache(context, cache_lock, cache, process_register)
+            response = processWithCache(context, cache_lock, cache, processRegister)
             return response
         except (EmailAlreadyExistsException, TickerNotValidException, mysql.connector.Error, ThresholdsViolatedException) as e:
             if isinstance(e, mysql.connector.Error):
@@ -213,26 +157,26 @@ class FinancialService(pb2_grpc.FinancialServiceServicer):
 
 
     def UpdateUser(self, request, context):
-        def process_update():
+        def processUpdate():
             try:
                 self.cur.execute("LOCK TABLES utenti WRITE, sessioni_utenti WRITE;")
                 
                 # Controlla se l'utente inserito esiste  
-                if self.read_service.n_users(request.email) == 0:
+                if self.read_service.getNUsers(request.email) == 0:
                     raise UserDoesNotExistsException
 
                 # Controlla se il ticker è valido
-                if not is_valid_ticker(request.ticker):
+                if not isValidTicker(request.ticker):
                     raise TickerNotValidException(request.ticker)
                 
                 # Verifica che valga la condizione "high_value is NULL or high_value > low_value"
                 low_value = request.low_value.value if request.HasField("low_value") else None
                 high_value = request.high_value.value if request.HasField("high_value")  else None
-                if not (high_value is None or high_value > low_value):
+                if high_value is not None and low_value is not None and high_value <= low_value:
                     raise ThresholdsViolatedException
                 
                 # Aggiorna il ticker
-                self.write_service.update_user(request.ticker, low_value, high_value, request.email)                
+                self.write_service.updateUser(request.email, request.ticker, low_value, high_value)                
                 
                 return pb2.UserResponse(success=True, message="Utente aggiornato con successo.")
             
@@ -240,7 +184,7 @@ class FinancialService(pb2_grpc.FinancialServiceServicer):
                 self.cur.execute("UNLOCK TABLES;")
     
         try:
-            response = process_with_cache(context, cache_lock, cache, process_update)
+            response = processWithCache(context, cache_lock, cache, processUpdate)
             return response
         
         except (UserDoesNotExistsException, TickerNotValidException, mysql.connector.Error, ThresholdsViolatedException) as e:
@@ -252,17 +196,17 @@ class FinancialService(pb2_grpc.FinancialServiceServicer):
     
     def DeleteUser(self, request, context):
         
-        def process_delete():
+        def processDelete():
 
             try:       
                 # Lock della tabella 
                 self.cur.execute("LOCK TABLES utenti WRITE;")
             
                 # Controlla se l'utente inserito esiste  
-                if self.read_service.n_users(request.email) == 0:
+                if self.read_service.getNUsers(request.email) == 0:
                     raise UserDoesNotExistsException
 
-                self.write_service.delete_user(request.email)
+                self.write_service.deleteUser(request.email)
 
                 return pb2.UserResponse(success=True, message="Utente cancellato con successo.")
             
@@ -270,7 +214,7 @@ class FinancialService(pb2_grpc.FinancialServiceServicer):
                 self.cur.execute("UNLOCK TABLES;")
         
         try:
-            response = process_with_cache(context, cache_lock, cache, process_delete)
+            response = processWithCache(context, cache_lock, cache, processDelete)
             return response
         
         except (UserDoesNotExistsException, mysql.connector.Error) as e:
@@ -281,16 +225,16 @@ class FinancialService(pb2_grpc.FinancialServiceServicer):
 
     def GetLatestValue(self, request, context):
         
-        def process_value():
+        def processValue():
         
             try:
                 self.cur.execute("LOCK TABLES utenti READ, sessioni_utenti READ, dati READ;")
             
                 # Controlla se l'utente inserito esiste  
-                if self.read_service.n_users(request.email) == 0:
+                if self.read_service.getNUsers(request.email) == 0:
                     raise UserDoesNotExistsException
 
-                result = self.read_service.get_latest_value(request.email)
+                result = self.read_service.getLatestValue(request.email)
                 
                 if result:
                     data = pb2.FinancialData(
@@ -312,7 +256,7 @@ class FinancialService(pb2_grpc.FinancialServiceServicer):
             finally:
                 self.cur.execute("UNLOCK TABLES;")
         try:    
-            response = process_with_cache(context, cache_lock, cache, process_value)
+            response = processWithCache(context, cache_lock, cache, processValue)
             return response
         
         except (UserDoesNotExistsException, NoDataFoundException, mysql.connector.Error) as e:
@@ -334,15 +278,15 @@ class FinancialService(pb2_grpc.FinancialServiceServicer):
                     raise InvalidInputTypeException
         
                 # Controlla se l'utente inserito esiste  
-                if self.read_service.n_users(request.email) == 0:
+                if self.read_service.getNUsers(request.email) == 0:
                     raise UserDoesNotExistsException
 
         
                 # Controlla se esistono n=count dati
-                if self.read_service.n_user_data(request.email) < request.count:
+                if self.read_service.getNUserData(request.email) < request.count:
                     raise NotEnoughDataException
 
-                result = self.read_service.get_average_value(request.email, request.count)
+                result = self.read_service.getAverageValue(request.email, request.count)
                 
                 data = pb2.FinancialData(
                                          open = float(result[0]), 
@@ -357,7 +301,7 @@ class FinancialService(pb2_grpc.FinancialServiceServicer):
             finally:
                 self.cur.execute("UNLOCK TABLES;")
         try:
-            response = process_with_cache(context, cache_lock, cache, process_avg)
+            response = processWithCache(context, cache_lock, cache, process_avg)
             return response
         
         except (InvalidInputTypeException, UserDoesNotExistsException, NotEnoughDataException, mysql.connector.Error) as e:
