@@ -86,8 +86,8 @@ services:
       DB_USER: my_user
       DB_PASSWORD: my_pass
       KAFKA_BOOTSTRAP_SERVERS: kafka:9092
-      INPUT_TOPIC: to-alert-system
-      OUTPUT_TOPIC: to-notifier
+      #INPUT_TOPIC: to-alert-system
+      #OUTPUT_TOPIC: to-notifier
     depends_on:
       - kafka
       - mysql
@@ -102,7 +102,7 @@ services:
     container_name: alert_notifier_system_cntr
     environment:
       KAFKA_BOOTSTRAP_SERVERS: kafka:9092
-      INPUT_TOPIC: to-notifier
+      #INPUT_TOPIC: to-notifier
       SMTP_USER: signore.marco26@gmail.com
       SMTP_PASSWORD: kcqw thxc hqio jdpt
     depends_on:

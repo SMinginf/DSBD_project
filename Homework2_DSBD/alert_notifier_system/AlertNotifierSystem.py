@@ -6,11 +6,16 @@ from email.mime.text import MIMEText
 from email.mime.multipart import MIMEMultipart
 import os
 
-# Configurazione di Kafka (immutata)
+# Configurazione di Kafka
 consumer_config = {
-    'bootstrap.servers': 'kafka:9092',  # Indirizzo del broker Kafka
-    'group.id': 'notifier-group',           # Gruppo consumer per gestione offset
+    #'bootstrap.servers': 'kafka:9092',  # Indirizzo del broker Kafka
+    #'group.id': 'notifier-group',           # Gruppo consumer per gestione offset
     #'auto.offset.reset': 'earliest'         # Legge i messaggi dall'inizio se non trova un offset salvato
+    'bootstrap.servers': 'kafka:9092',  # Kafka broker address
+    'group.id': 'notifier-group',  # Consumer group ID
+    #'auto.offset.reset': 'earliest',  # Start reading from the earliest message
+    'enable.auto.commit': True,  # Automatically commit offsets periodically
+    'auto.commit.interval.ms': 5000  # Commit offsets every 5000ms (5 seconds)
 }
 consumer = Consumer(consumer_config)
 consumer.subscribe(['to-notifier'])  # Iscrizione al topic Kafka
@@ -36,8 +41,8 @@ def send_email(to_email, subject, body):
         # Connetti al server SMTP e invia l'email
         server = smtplib.SMTP(smtp_server, smtp_port)
         server.starttls()  # Attiva la modalità TLS
-        server.login(os.getenv("SMTP_USER"), os.getenv("SMTP_PASSWORD"))
-        server.sendmail(os.getenv("SMTP_USER"), to_email, messaggio.as_string())
+        server.login(os.getenv("SMTP_USER", "signore.marco26@gmail.com"), os.getenv("SMTP_PASSWORD","kcqw thxc hqio jdpt"))
+        server.sendmail(os.getenv("SMTP_USER", "signore.marco26@gmail.com" ), to_email, messaggio.as_string())
         print("Email inviata con successo!")
     except Exception as e:
         print(f"Errore durante l'invio dell'email: {e}")
@@ -67,5 +72,6 @@ while True:
 
         # Invia l'email
         send_email(to_email, subject, body)
+        
     except Exception as e:
         print(f"Errore durante l'elaborazione del messaggio: {e}")

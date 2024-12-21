@@ -19,4 +19,4 @@ RUN chmod +x ../usr/local/bin/wait-for-it.sh
 
 
 # Comando per eseguire il server
-CMD ["wait-for-it.sh", "kafka:9092", "--timeout=30", "--","python", "AlertSystem.py"]
+CMD ["wait-for-it.sh", "mysql:3306", "--","wait-for-it.sh", "kafka:9092", "--timeout=30", "--","python", "AlertSystem.py"]

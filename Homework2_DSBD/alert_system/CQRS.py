@@ -101,7 +101,39 @@ class QueryHandler:
         self.cur.execute("SELECT id, email, ticker FROM utenti;")
         return self.cur.fetchall()
     
-    def getUsersData(self):
-        self.cur.execute("SELECT email, dati.ticker, high_value, low_value, date, close FROM utenti JOIN sessioni_utenti ON utenti.id = sessioni_utenti.id_utente JOIN dati ON sessioni_utenti.id_dato = dati.id;")
+    def getLastUsersData(self):
+        self.cur.execute("""
+            SELECT 
+                DISTINCT utenti.email, 
+                dati.ticker, 
+                utenti.high_value, 
+                utenti.low_value, 
+                dati.date, 
+                dati.close
+            FROM 
+                utenti
+            JOIN 
+                sessioni_utenti ON utenti.id = sessioni_utenti.id_utente
+            JOIN 
+                dati ON sessioni_utenti.id_dato = dati.id
+            JOIN (
+                -- Sottoquery per ottenere la data massima per ciascun utente e ticker
+                SELECT  
+                    utenti.id AS id_utente, 
+                    MAX(dati.date) AS max_date
+                FROM 
+                    utenti
+                JOIN 
+                    sessioni_utenti ON utenti.id = sessioni_utenti.id_utente
+                JOIN 
+                    dati ON sessioni_utenti.id_dato = dati.id
+                GROUP BY 
+                    utenti.id
+            ) AS latest_data 
+            ON 
+                utenti.id = latest_data.id_utente 
+                AND dati.date = latest_data.max_date;
+        """)
+
         return self.cur.fetchall()
         

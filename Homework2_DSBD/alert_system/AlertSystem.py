@@ -1,13 +1,18 @@
-from confluent_kafka import Consumer, Producer
+from confluent_kafka import Consumer, Producer, KafkaError, KafkaException
 import json
 import time
 import CQRS
 
 # Configurazione di Kafka
 consumer_config = {
-    'bootstrap.servers': 'kafka:9092',
-    'group.id': 'alert-system-group',
+    #'bootstrap.servers': 'localhost:9092',
+    #'group.id': 'alert-system-group',
     #'auto.offset.reset': 'earliest'
+    'bootstrap.servers': 'kafka:9092',  # Kafka broker address
+    'group.id': 'alert-system-group',  # Consumer group ID
+    #'auto.offset.reset': 'earliest',  # Start reading from the earliest message
+    'enable.auto.commit': True,  # Automatically commit offsets periodically
+    'auto.commit.interval.ms': 5000  # Commit offsets every 5000ms (5 seconds)
 }
 producer_config = {'bootstrap.servers': 'kafka:9092',  # Kafka broker address
         'acks': 'all',  # Ensure all in-sync replicas acknowledge the message
@@ -34,7 +39,7 @@ def scan_database_and_notify():
     
     try:
         
-        records = read_service.getUsersData()
+        records = read_service.getLastUsersData()
 
         for record in records:
             if record['high_value'] is not None and record['close'] > record['high_value']:
@@ -76,28 +81,29 @@ while True:
     # - Se nessun messaggio è disponibile entro il timeout specificato, poll() restituisce None.
     msg = consumer.poll(1.0)
     if msg is None:
+        #print("Il messaggio è None.")
         continue
     if msg.error():
-        if msg.error().code() == 'KafkaError._ALL_BROKERS_DOWN':
+        if msg.error().code() == KafkaError._ALL_BROKERS_DOWN :
             print("Tutti i broker Kafka sono inattivi. Uscita dal consumer.")
             break
-    else:
-       print(f"Errore nel Consumer: {msg.error()}")
-       continue
+        else:
+            print(f"Errore nel Consumer: {msg.error()}")
+            continue
     
     # Processa il messaggio ricevuto
-    #try:
-    # Decodifica il messaggio JSON ricevuto
-    print(f"{msg.value()}")
-    data = json.loads(msg.value().decode('utf-8'))
-    print(f"Ricevuto messaggio: {data}")
+    try:
+        # Decodifica il messaggio JSON ricevuto
+        #print(f"Print di msg.value() = {msg.value()}\n Print di msg = {msg}\n")
         
-    # Esegui la scansione del database e la notifica
-    scan_database_and_notify()
+        data = json.loads(msg.value().decode('utf-8'))
+        print(f"Ricevuto messaggio: {data}")
+        
+        # Esegui la scansione del database e la notifica
+        scan_database_and_notify()
 
-    #except json.JSONDecodeError as e:
-    #    print(f"Errore di decodifica JSON: {e}")
-    #    continue  # Vai alla prossima iterazione se il messaggio non è valido
+    except Exception as e:
+        print(f"Errore: {e}")
+        continue  # Vai alla prossima iterazione se il messaggio non è valido
 
-    time.sleep(300)
 
