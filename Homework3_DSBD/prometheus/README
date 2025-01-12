@@ -1,0 +1,6 @@
+- Il file docker-compose.yml include cAdvisor, che potete utilizzare per monitorare i container presenti sulla vostra macchina.
+- Sempre in docker-compose.yml è incluso anche Alert Manager; tuttavia, non è necessario utilizzarlo obbligatoriamente.
+- Il file di configurazione di Prometheus (prometheus.yml) si trova nella cartella prometheus. All’interno della stessa cartella troverete anche il file relativo agli alert.
+- Nel file di configurazione, alla fine, troverete il riferimento al node-exporter (- 172.17.0.1:53122): potete rimuoverlo se non utilizzate un node-exporter. In alternativa, se lo usate, regolate la porta in base alla configurazione scelta.
+- Potete usare il random-exporter come esempio di base. Di default è configurato sulla porta 9999, ma potete modificarla a piacere. Nel file di configurazione di Prometheus è referenziato come - 172.17.0.1:9999.
+- Allego un notebook Jupiter con un esempio di Prometheus query. Qui trovate altri esempi: https://pypi.org/project/prometheus-api-client/
