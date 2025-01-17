@@ -1,0 +1,28 @@
+1: crea il cluster con "kind create cluster --config kind-cluster.yml"
+2: crea prima il namespace con "kubectl apply -f ./k8s_manifests/namespaces/namespace.yaml -n my-app"
+3: carica le immagini con "kind load docker-image nome_img --name mio-cluster"
+4: applica il manifest della config map
+5: applica il deployment con "kubectl apply -f k8s_manifests/mio-deployment.yaml -n my-app"
+
+
+
+
+
+
+Per entrare nel database mysql:
+1) Trova il pod che esegue lo statefulset: kubectl get pods -n <NAMESPACE>
+2) Esegui il comando per aprire una shell nel container MySQL: kubectl exec -it <MYSQL_POD_NAME> -n <NAMESPACE> -- bash
+3) Accedi al database con "mysql -u my_user -p my_db"
+
+
+
+Repository privato docker
+1) docker login
+2) docker tag nome_img marsilence/progetto-dsbd:tag_img
+3) docker push marsilence/progetto-dsbd:tag_img
+
+
+Per aprire su localhost l'interfaccia di prometheus:
+1) kubectl port-forward -n <namespace> <prometheus-pod-name> 9090:9090
+2) http://localhost:9090
+

@@ -1,0 +1,48 @@
+apiVersion: v1
+kind: Service
+metadata:
+  labels:
+    app: alert-notifier-system
+  name: alert-notifier-system
+  namespace: my-app
+spec:
+  ports:
+    - port: 8084
+  selector:
+    app: alert-notifier-system
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  labels:
+    app: alert-notifier-system
+  name: alert-notifier-system-deployment
+  namespace: my-app
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: alert-notifier-system
+  template:
+    metadata:
+      labels:
+        app: alert-notifier-system
+        network/kafka-network: "true"
+    spec:
+      containers:
+        - env:
+            - name: KAFKA_BOOTSTRAP_SERVERS
+              value: kafka:9092
+            - name: SMTP_PASSWORD
+              value: ytgu xjmu uxbp ezvv
+            - name: SMTP_USER
+              value: alert.system26@gmail.com
+          image: marsilence/progetto-dsbd:alert_notifier_system_img
+          imagePullPolicy: IfNotPresent
+          name: alert-notifier-system-cntr
+          #ports:
+          #  - containerPort: 8084
+          #    protocol: TCP
+      restartPolicy: Always
+      imagePullSecrets:
+        - name: my-registry-secret

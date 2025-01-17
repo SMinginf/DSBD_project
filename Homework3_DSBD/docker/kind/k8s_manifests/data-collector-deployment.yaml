@@ -1,0 +1,56 @@
+apiVersion: v1
+kind: Service
+metadata:
+  namespace: my-app
+  name: data-collector
+  labels:
+    app: data-collector
+spec:
+  ports:
+    #- port: 50000
+    - name: prom-metrics
+      port: 9999
+      targetPort: 9999
+  selector:
+    app: data-collector
+
+
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  labels:
+    app: data-collector
+  name: data-collector-deployment
+  namespace: my-app
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: data-collector
+  template:
+    metadata:
+      labels:
+        app: data-collector
+        network/kafka-network: "true"
+    spec:
+      #initContainers:
+      #  - name: init-mysql
+      #    image: mysql:latest
+      #    command: ['sh', '-c', 'until mysqladmin ping -h mysql --silent; do sleep 1; done;']
+      containers:
+        - image: marsilence/progetto-dsbd:data_collector_img
+          imagePullPolicy: IfNotPresent
+          name: data-collector-cntr   
+          env:
+            - name: DB_HOST
+              value: mysql
+            - name: DB_NAME
+              value: my_db
+            - name: DB_PASSWORD
+              value: my_pass
+            - name: DB_USER
+              value: my_user
+      imagePullSecrets:
+        - name: my-registry-secret  # Usa il secret creato per autenticarti
+      restartPolicy: Always
