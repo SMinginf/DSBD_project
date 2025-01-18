@@ -1,0 +1,19 @@
+kind: Cluster
+apiVersion: kind.x-k8s.io/v1alpha4
+name: mio-cluster
+
+nodes:
+  - role: control-plane  # Nodo master
+    image: kindest/node:v1.32.0
+    labels:
+      custom-label: "control-plane"
+
+  - role: worker  # Nodo worker
+    image: kindest/node:v1.32.0  
+    labels:
+      custom-label: "worker"
+    extraPortMappings:
+      - containerPort: 30092 # internal kafka nodeport
+        hostPort: 9092 # port exposed on "host" machine for kafka
+      
+

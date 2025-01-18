@@ -1,0 +1,62 @@
+apiVersion: v1
+kind: Service
+metadata:
+  namespace: my-app
+  name: mysql
+  labels:
+    app: mysql
+spec:
+  ports:
+    - port: 3306
+      targetPort: 3306
+  selector:
+    app: mysql
+---
+apiVersion: apps/v1
+kind: StatefulSet
+metadata:
+  name: mysql-statefulset
+  namespace: my-app
+  labels:
+    app: mysql
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: mysql
+  serviceName: mysql
+  template:
+    metadata:
+      labels:
+        app: mysql
+    spec:
+      containers:
+      - name: mysql
+        image: marsilence/progetto-dsbd:mysql
+        ports:
+        - containerPort: 3306
+        envFrom:
+          - secretRef:
+              name: mysql-access-config-secret
+        volumeMounts:
+        - name: mysql-data
+          mountPath: /var/lib/mysql
+        - name: mysql-cm1
+          mountPath: /docker-entrypoint-initdb.d/db_init_script.sql
+          subPath: db_init_script.sql
+          readOnly: true
+      volumes:
+      - name: mysql-cm1
+        configMap:
+          name: mysql-cm1
+      imagePullSecrets:
+        - name: my-registry-secret  # Usa il secret creato per autenticarti
+  volumeClaimTemplates:
+  - metadata:
+      name: mysql-data
+    spec:
+      accessModes: ["ReadWriteOnce"]
+      resources:
+        requests:
+          storage: 1Gi
+
