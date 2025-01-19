@@ -1,0 +1,40 @@
+#apiVersion: v1
+#kind: Service
+#metadata:
+#  labels:
+#    app: alert-system
+#  name: alert-system
+#  namespace: my-app
+#spec:
+#  ports:
+#    - port: 8083
+#  selector:
+#    app: alert-system
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  labels:
+    app: alert-system
+  name: alert-system-deployment
+  namespace: my-app
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: alert-system
+  template:
+    metadata:
+      labels:
+        app: alert-system
+        network/kafka-network: "true"
+    spec:
+      containers:
+        - name: alert-system-cntr
+          image: marsilence/progetto-dsbd:alert_system_img
+          envFrom:
+            - secretRef:
+                name: mysql-credentials-secret          
+      imagePullSecrets:
+        - name: my-registry-secret
+      restartPolicy: Always

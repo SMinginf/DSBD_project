@@ -1,0 +1,42 @@
+apiVersion: monitoring.coreos.com/v1
+kind: ServiceMonitor
+metadata:
+  name: server-sm
+  namespace: monitoring
+  labels:
+    release: prometheus  
+spec:
+  selector:
+    matchLabels:
+      app: grpc-server
+  endpoints:
+    - port: prom-metrics
+      interval: 15s
+      path: /metrics
+  namespaceSelector:
+    matchNames:
+      - my-app
+      
+---
+
+apiVersion: monitoring.coreos.com/v1
+kind: ServiceMonitor
+metadata:
+  name: data-collector-sm
+  namespace: monitoring
+  labels:
+    release: prometheus  
+spec:
+  selector:
+    matchLabels:
+      app: data-collector
+  endpoints:
+    - port: prom-metrics
+      interval: 15s
+      path: /metrics
+  namespaceSelector:
+    matchNames:
+      - my-app
+      
+---
+
