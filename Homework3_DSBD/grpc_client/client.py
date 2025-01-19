@@ -26,7 +26,8 @@ def mostra_menu(client_id):
 
 def run():
     # Connessione al server gRPC
-    target = 'localhost:50051'
+    #target = 'localhost:50051'
+    target= '172.22.0.3:30051'  #indirizzo ip del nodo worker del cluster kind
 
     # Generazione casuale id utente e inizializzazione request_id = 0
     client_id = str(uuid.uuid4())

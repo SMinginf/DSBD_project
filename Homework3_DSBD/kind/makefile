@@ -71,6 +71,7 @@ delete-kafka:
 delete-prometheus:
 	helm uninstall prometheus -n monitoring
 
+
 delete-redis:
 	$(KUBECTL) delete statefulset redis-statefulset -n $(NAMESPACE)
 	

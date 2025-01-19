@@ -15,10 +15,6 @@ import socket
 producer_config = {
         'bootstrap.servers': 'kafka:9092',  # Kafka broker address
         'acks': 'all',  # Ensure all in-sync replicas acknowledge the message
-        
-        # In questo caso ha poco senso questa impostazione. Il datacollector non deve inviare
-        # molteplici messaggi per i quali ha senso preservare in ricezione l'ordine di trasmissione
-        #'max.in.flight.requests.per.connection': 1,  
         'retries': 3 
     }
 producer = Producer(producer_config)
@@ -84,8 +80,8 @@ def notify_kafka():
     """
     try:
         message = {'status': 'update_completed', 'timestamp': time.strftime("%Y-%m-%d %H:%M:%S")}
-        producer.produce(topic, json.dumps(message).encode('utf-8'))  # Accoda il messaggio nel buffer interno del producer prima di inviarlo al broker in batch (per ottimizzare il throughput)
-        producer.flush()  # Invia tutta la coda di messaggi del buffer interno del producer. Blocca l'esecuzione, attende la consegna di tutti i messaggi.
+        producer.produce(topic, json.dumps(message).encode('utf-8'))  
+        producer.flush()  
         print(f"Notifica inviata a Kafka: {message}")
     except Exception as e:
        print(f"Errore durante l'invio a Kafka: {e}")

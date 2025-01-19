@@ -6,17 +6,14 @@ import redis
 
 # ------------------------------------ CONFIGURAZIONE KAFKA -----------------------------------------------------------------------
 consumer_config = {
-    #'auto.offset.reset': 'earliest'
+
     'bootstrap.servers': 'kafka:9092',  # Kafka broker address
-    #'bootstrap.servers': 'localhost:9092',
     'group.id': 'alert-system-group',  # Consumer group ID
-    #'auto.offset.reset': 'earliest',  # Start reading from the earliest message
     'enable.auto.commit': True,  # Automatically commit offsets periodically
     'auto.commit.interval.ms': 5000  # Commit offsets every 5000ms (5 seconds)
 }
 producer_config = {'bootstrap.servers': 'kafka:9092',  # Kafka broker address
         'acks': 'all',  # Ensure all in-sync replicas acknowledge the message
-        #'max.in.flight.requests.per.connection': 1,  # Only one in-flight request per connection
         'retries': 3 
         }
 consumer = Consumer(consumer_config)
@@ -99,15 +96,7 @@ def scan_database_and_notify():
             message = {'email': record['email'], 'ticker': record['ticker'], 'ticker_date': record['date'].isoformat(), 'condition': condition}
             
             producer.produce(producer_topic, json.dumps(message), callback = delivery_report)            
-            #msgs_count += 1
-
-            # Per evitare di fare il flush ad ogni messaggio o di tutti i messaggi in una sola volta alla fine
-            #if msgs_count >= msg_threshold :
-            #    producer.flush()
-            #    msgs_count = 0
-            #    print(f"Flush di {msg_threshold} messaggi a Kafka.")
-        
-        # Flush degli ultimi messaggi rimanenti
+            
         producer.flush()
         print(f"Messaggi totali consegnati: {delivered_count}")
 

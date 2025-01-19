@@ -8,12 +8,9 @@ import os
 
 # Configurazione di Kafka
 consumer_config = {
-    #'bootstrap.servers': 'localhost:9092',  # Indirizzo del broker Kafka
-    #'group.id': 'notifier-group',           # Gruppo consumer per gestione offset
-    #'auto.offset.reset': 'earliest'         # Legge i messaggi dall'inizio se non trova un offset salvato
+
     'bootstrap.servers': 'kafka:9092',  # Kafka broker address
     'group.id': 'notifier-group',  # Consumer group ID
-    #'auto.offset.reset': 'earliest',  # Start reading from the earliest message
     'enable.auto.commit': True,  # Automatically commit offsets periodically
     'auto.commit.interval.ms': 5000  # Commit offsets every 5000ms (5 seconds)
 }

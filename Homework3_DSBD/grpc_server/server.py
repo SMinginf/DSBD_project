@@ -3,7 +3,6 @@ from concurrent import futures
 import CQRS
 import financial_service_pb2 as pb2
 import financial_service_pb2_grpc as pb2_grpc
-import datetime
 from threading import Lock
 import yfinance as yf
 import prometheus_client
@@ -74,7 +73,7 @@ my_hostname = socket.gethostname()
 REQUEST_COUNTER = prometheus_client.Counter(
     'total_received_requests',
     'Numero totale di richieste ricevute',
-    ['service', 'hostname', 'method']
+   ['service', 'hostname', 'method']
 )
 
 REQUEST_ELABORATION_TIME = prometheus_client.Gauge(
