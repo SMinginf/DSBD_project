@@ -1,0 +1,67 @@
+apiVersion: v1
+kind: Service
+metadata:
+  namespace: my-app
+  name: grpc-server
+  labels:
+    app: grpc-server
+spec:
+  type: NodePort
+  ports:
+    - name: server-port
+      nodePort: 30051	    # Porta esposta all'esterno del cluster
+      port: 50051          # Porta esposta dal Service
+      targetPort: 50051    # Porta interna del container 
+  selector:
+    app: grpc-server
+
+---
+
+apiVersion: v1
+kind: Service
+metadata:
+  namespace: my-app
+  name: grpc-server-metrics
+  labels:
+    app: grpc-server
+spec:
+  ports:
+    - name: prom-metrics
+      port: 9999
+      targetPort: 9999
+  selector:
+    app: grpc-server
+
+---
+
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: grpc-server-deployment
+  namespace: my-app
+  labels:
+    app: grpc-server
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: grpc-server
+  template:
+    metadata:
+      labels:
+        app: grpc-server
+    spec:
+      containers:
+        - image: marsilence/progetto-dsbd:grpc_server_img
+          imagePullPolicy: IfNotPresent  # Assicurati che Kubernetes tiri l'immagine solo se non ce l'ha già
+          name: grpc-server-cntr
+          ports:
+            - containerPort: 50051	# Porta a cui il server riceve le richieste dai client
+            - containerPort: 9999	# Porta a cui il server espone le metriche per prometheus
+          envFrom:
+            - secretRef:
+                name: mysql-credentials-secret
+      imagePullSecrets:
+        - name: my-registry-secret  # Usa il secret creato per autenticarti    
+      hostname: grpc-server-host
+      restartPolicy: Always

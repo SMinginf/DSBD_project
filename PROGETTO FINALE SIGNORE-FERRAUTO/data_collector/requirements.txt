@@ -1,0 +1,5 @@
+yfinance
+mysql-connector-python
+schedule
+confluent_kafka
+prometheus-client
